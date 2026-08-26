@@ -1,10 +1,10 @@
-name: Unreal Runner Checkout Test
+name: Unreal Shipping Build
 
 on:
   workflow_dispatch:
 
 jobs:
-  test-runner:
+  build:
     runs-on: self-hosted
 
     steps:
@@ -13,28 +13,53 @@ jobs:
         with:
           lfs: true
 
-      - name: Confirm repository checkout
+      - name: Build Unreal project
         shell: powershell
         run: |
-          Write-Host "Repository checked out to:"
-          Write-Host $env:GITHUB_WORKSPACE
-
-          Write-Host ""
-          Write-Host "Repository contents:"
-          Get-ChildItem $env:GITHUB_WORKSPACE
-
-      - name: Verify Git LFS assets
-        shell: powershell
-        run: |
-          Write-Host "Git LFS files:"
-          git lfs ls-files
-
+          $RunUAT = "D:\UnrealEngine\UE_5.6\Engine\Build\BatchFiles\RunUAT.bat"
           $Project = Join-Path $env:GITHUB_WORKSPACE "DocOnThePlane.uproject"
+          $UnrealEditorCmd = "D:\UnrealEngine\UE_5.6\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
+          $BuildOutput = "D:\Builds\DocOnThePlane_GitHubActions"
 
-          if (-not (Test-Path $Project)) {
-              throw "DocOnThePlane.uproject was not found."
+          if (Test-Path $BuildOutput) {
+              Remove-Item $BuildOutput -Recurse -Force
           }
 
-          Write-Host ""
-          Write-Host "Unreal project found:"
-          Write-Host $Project
+          & $RunUAT BuildCookRun `
+          -project="$Project" `
+          -nop4 `
+          -utf8output `
+          -nocompileeditor `
+          -skipbuildeditor `
+          -cook `
+          -target=DocOnThePlane `
+          -unrealexe="$UnrealEditorCmd" `
+          -platform=Win64 `
+          -installed `
+          -stage `
+          -archive `
+          -package `
+          -build `
+          -pak `
+          -iostore `
+          -compressed `
+          -prereqs `
+          -archivedirectory="$BuildOutput" `
+          -clientconfig=Shipping `
+          -nodebuginfo
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Unreal build failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Verify packaged build
+        shell: powershell
+        run: |
+          $Exe = "D:\Builds\DocOnThePlane_GitHubActions\Windows\DocOnThePlane.exe"
+
+          if (-not (Test-Path $Exe)) {
+              throw "Packaged executable was not found: $Exe"
+          }
+
+          Write-Host "Shipping build created successfully:"
+          Write-Host $Exe
