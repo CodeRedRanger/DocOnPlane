@@ -1,4 +1,4 @@
-name: Self-Hosted Runner Test
+name: Unreal Runner Checkout Test
 
 on:
   workflow_dispatch:
@@ -8,10 +8,27 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Confirm runner
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Confirm repository checkout
         shell: powershell
         run: |
-          Write-Host "GitHub Actions reached my Windows runner."
-          Write-Host "Computer: $env:COMPUTERNAME"
-          Write-Host "User: $env:USERNAME"
-          Get-Location
+          Write-Host "Repository checked out to:"
+          Write-Host $env:GITHUB_WORKSPACE
+
+          Write-Host ""
+          Write-Host "Repository contents:"
+          Get-ChildItem $env:GITHUB_WORKSPACE
+
+      - name: Verify Unreal project
+        shell: powershell
+        run: |
+          $Project = Join-Path $env:GITHUB_WORKSPACE "DocOnThePlane.uproject"
+
+          if (-not (Test-Path $Project)) {
+              throw "DocOnThePlane.uproject was not found."
+          }
+
+          Write-Host "Found Unreal project:"
+          Write-Host $Project
