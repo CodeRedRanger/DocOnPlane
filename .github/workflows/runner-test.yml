@@ -2,23 +2,39 @@ name: Unreal Shipping Build
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example 0.1.1"
+        required: true
+        default: "0.1.1"
 
 jobs:
   build:
     runs-on: self-hosted
 
     steps:
+      # ---------------------------------------------------------
+      # STEP 1 - CHECK OUT GITHUB REPOSITORY
+      # ---------------------------------------------------------
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           lfs: true
 
+      # ---------------------------------------------------------
+      # STEP 2 - BUILD UNREAL PROJECT
+      # ---------------------------------------------------------
+
       - name: Build Unreal project
         shell: powershell
         run: |
           $RunUAT = "D:\UnrealEngine\UE_5.6\Engine\Build\BatchFiles\RunUAT.bat"
+
           $Project = Join-Path $env:GITHUB_WORKSPACE "DocOnThePlane.uproject"
+
           $UnrealEditorCmd = "D:\UnrealEngine\UE_5.6\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
+
           $BuildOutput = "D:\Builds\DocOnThePlane_GitHubActions"
 
           if (Test-Path $BuildOutput) {
@@ -50,6 +66,10 @@ jobs:
               throw "Unreal build failed with exit code $LASTEXITCODE"
           }
 
+      # ---------------------------------------------------------
+      # STEP 3 - VERIFY UNREAL PACKAGE
+      # ---------------------------------------------------------
+
       - name: Verify packaged build
         shell: powershell
         run: |
@@ -61,3 +81,81 @@ jobs:
 
           Write-Host "Shipping build created successfully:"
           Write-Host $Exe
+
+      # ---------------------------------------------------------
+      # STEP 4 - STAGE FILES FOR INNO SETUP
+      # ---------------------------------------------------------
+
+      - name: Stage installer files
+        shell: powershell
+        run: |
+          $Source = "D:\Builds\DocOnThePlane_GitHubActions\Windows"
+          $Destination = "D:\DocOnPlaneInstaller\FilesForInstall"
+
+          if (-not (Test-Path $Source)) {
+              throw "Packaged Windows folder was not found: $Source"
+          }
+
+          Write-Host "Clearing old installer staging files..."
+
+          if (Test-Path $Destination) {
+              Remove-Item "$Destination\*" -Recurse -Force
+          }
+          else {
+              New-Item -ItemType Directory -Path $Destination | Out-Null
+          }
+
+          Write-Host "Copying Windows build into installer staging directory..."
+
+          Copy-Item $Source $Destination -Recurse -Force
+
+          Write-Host "Installer staging complete."
+
+      # ---------------------------------------------------------
+      # STEP 5 - BUILD INNO SETUP INSTALLER
+      # ---------------------------------------------------------
+
+      - name: Build Inno Setup installer
+        shell: powershell
+        run: |
+          $Version = "${{ inputs.version }}"
+
+          if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+              throw "Version must use format X.Y.Z, for example 0.1.1"
+          }
+
+          $InnoCompiler = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+
+          $InnoScript = "D:\DocOnPlaneInstaller\DocOnPlaneInstallerScript.iss"
+
+          $InstallerExe = "D:\DocOnPlaneInstaller\Output\DocOnThePlane_v$Version.exe"
+
+          if (-not (Test-Path $InnoCompiler)) {
+              throw "Inno Setup compiler was not found: $InnoCompiler"
+          }
+
+          if (-not (Test-Path $InnoScript)) {
+              throw "Inno Setup script was not found: $InnoScript"
+          }
+
+          # Delete this exact version first so an old installer
+          # cannot make the verification step falsely succeed.
+          if (Test-Path $InstallerExe) {
+              Remove-Item $InstallerExe -Force
+          }
+
+          Write-Host "Building installer version $Version..."
+
+          & $InnoCompiler "/DMyAppVersion=$Version" $InnoScript
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Inno Setup compilation failed with exit code $LASTEXITCODE"
+          }
+
+          if (-not (Test-Path $InstallerExe)) {
+              throw "Installer was not created at expected path: $InstallerExe"
+          }
+
+          Write-Host ""
+          Write-Host "Installer created successfully:"
+          Write-Host $InstallerExe
