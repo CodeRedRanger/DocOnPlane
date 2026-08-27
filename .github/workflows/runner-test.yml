@@ -159,3 +159,30 @@ jobs:
           Write-Host ""
           Write-Host "Installer created successfully:"
           Write-Host $InstallerExe
+
+      # ---------------------------------------------------------
+      # STEP 6 - DEPLOY TO ITCH.IO
+      # ---------------------------------------------------------
+
+      - name: Deploy to itch.io
+        shell: powershell
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          $Version = "${{ inputs.version }}"
+          $InstallerExe = "D:\DocOnPlaneInstaller\Output\DocOnThePlane_v$Version.exe"
+          $ItchTarget = "coderedranger/doctorontheplane:windows"
+
+          if (-not (Test-Path $InstallerExe)) {
+              throw "Installer was not found: $InstallerExe"
+          }
+
+          Write-Host "Deploying version $Version to itch.io..."
+
+          butler push "$InstallerExe" $ItchTarget --userversion $Version
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "Butler deployment failed with exit code $LASTEXITCODE"
+          }
+
+          Write-Host "Deployment complete."
