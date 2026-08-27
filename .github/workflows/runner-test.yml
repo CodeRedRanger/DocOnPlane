@@ -160,6 +160,11 @@ jobs:
           Write-Host "Installer created successfully:"
           Write-Host $InstallerExe
 
+      - name: Verify Butler
+        shell: powershell
+        run: |
+          butler version
+
       # ---------------------------------------------------------
       # STEP 6 - DEPLOY TO ITCH.IO
       # ---------------------------------------------------------
